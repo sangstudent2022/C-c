@@ -1,103 +1,196 @@
+const fs = require("fs");
+const path = __dirname + "/data/autoreply/autoreply.json";
+const cooldowns = {};
+const { downloadFile } = require("../../utils/index");
+
 module.exports.config = {
-	name: "autorep",
-	version: "1.0.0",
-	hasPermssion: 0,
-	credits: "CThanh",
-	description: "tạo autorep cho 1 tin nhắn",
-	commandCategory: "Thành Viên",
-	usages: "[autorep] => [text need autorep]",
-	cooldowns: 5,
-	dependencies: {
-		"fs-extra": ""
-	}
-}
+    name: "autoreply",
+    version: "1.1.0",
+    hasPermssion: 0,
+    credits: "TatsuYTB",
+    description: "Thiết lập tự động trả lời tin nhắn cho từng nhóm, hỗ trợ hình ảnh và video",
+    commandCategory: "Quản Lí Box",
+    usages: "[add|addvideo|addimage|list] [Từ Khóa] | [Bot Trả Lời]",
+    cooldowns: 5
+};
 
 module.exports.onLoad = () => {
-	const { existsSync, writeFileSync } = global.nodemodule["fs-extra"];
-	if (!existsSync(__dirname + "/cache/data/autorep.json")) writeFileSync(__dirname + "/cache/autorep.json", JSON.stringify([]), 'utf-8');
-	return;
-}
+    const dataDir = __dirname + "/data/autoreply";
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+    if (!fs.existsSync(path)) fs.writeFileSync(path, JSON.stringify({}));
+};
 
-module.exports.handleEvent = function({ api, event }) {
-	const { readFileSync } = global.nodemodule["fs-extra"]; 
-	if (event.type !== "message_unsend" && event.body.length !== -1) {
-		const shortcut = JSON.parse(readFileSync(__dirname + "/cache/data/autorep.json"));
-		if (shortcut.some(item => item.id == event.threadID)) {
-			const getThread = shortcut.find(item => item.id == event.threadID).shorts;
-			if (getThread.some(item => item.in == event.body)) {
-				const shortOut = getThread.find(item => item.in == event.body).out;
-				if (shortOut.indexOf(" | ") !== -1) {
-					const arrayOut = shortOut.split(" | ");
-					return api.sendMessage(`${arrayOut[Math.floor(Math.random() * arrayOut.length)]}`, event.threadID);
-				}
-				else return api.sendMessage(`${shortOut}`, event.threadID);
-			}
-		}
-	}
-}
+const getFileExtension = (url, type) => {
+    if (type === "photo") return ".jpg";
+    if (type === "video") return ".mp4";
+    const ext = url.split(".").pop();
+    return `.${ext}`;
+};
 
-module.exports.run = function({ api, event, args }) {
-	const { readFile, writeFile } = global.nodemodule["fs-extra"];
-	var { threadID, messageID } = event;
-	var content = args.join(" ");
-	if (!content) return api.sendMessage("Sai rồi", threadID, messageID);
-	if (content.indexOf(`del`) == 0) {
-		let delThis = content.slice(4, content.length);
-		if (!delThis) return api.sendMessage("Không tìm thấy autorep bạn cần xóa", threadID, messageID);
-		return readFile(__dirname + "/cache/data/autorep.json", "utf-8", (err, data) => {
-			if (err) throw err;
-			var oldData = JSON.parse(data);
-			var getThread = oldData.find(item => item.id == threadID).shorts;
-			if (!getThread.some(item => item.in == delThis)) return api.sendMessage("Không tìm thấy autorep bạn cần xóa", threadID, messageID);
-			getThread.splice(getThread.findIndex(item => item.in === delThis), 1);
-			writeFile(__dirname + "/cache/data/autorep.json", JSON.stringify(oldData), "utf-8", (err) => (err) ? console.error(err) : api.sendMessage("Đã xóa autorep thành công!", threadID, messageID));
-		});
-	}
-	else if (content.indexOf(`all`) == 0)
-		return readFile(__dirname + "/cache/data/autorep.json", "utf-8", (err, data) => {
-			if (err) throw err;
-			let allData = JSON.parse(data);
-			let msg = '';
-			if (!allData.some(item => item.id == threadID)) return api.sendMessage("Hiện tại không có autorep nào", threadID, messageID);
-			if (allData.some(item => item.id == threadID)) {
-				let getThread = allData.find(item => item.id == threadID).shorts;
-				getThread.forEach(item => msg = '\n' + msg + item.in + ' -> ' + item.out);
-			}
-			if (!msg) return api.sendMessage("Hiện tại không có autorep nào 🦄💜", threadID, messageID);
-			api.sendMessage("Sau đây là autorep có trong nhóm: " + msg, threadID, messageID +"🦄💜");
-		});
-	else {
-		let narrow = content.indexOf(" => ");
-		if (narrow == -1) return api.sendMessage("Dùng sai rồi bạn 🦄💜", threadID, messageID);
-		let shortin = content.slice(0, narrow);
-		let shortout = content.slice(narrow + 4, content.length);
-		if (shortin == shortout) return api.sendMessage("2 input và output phait khác nhau nha 🦄💜", threadID, messageID);
-		if (!shortin) return api.sendMessage("Thiếu input", threadID, messageID);
-		if (!shortout) return api.sendMessage("Thiếu output", threadID, messageID);
-		return readFile(__dirname + "/cache/data/autorep.json", "utf-8", (err, data) => {
-			if (err) throw err;
-			var oldData = JSON.parse(data);
-			if (!oldData.some(item => item.id == threadID)) {
-				let addThis = {
-					id: threadID,
-					shorts: []
-				}
-				addThis.shorts.push({ in: shortin, out: shortout });
-				oldData.push(addThis);
-				return writeFile(__dirname + "/cache/data/autorep.json", JSON.stringify(oldData), "utf-8", (err) => (err) ? console.error(err) : api.sendMessage("Tạo autorep thành công", threadID, messageID));
-			}
-			else {
-				let getShort = oldData.find(item => item.id == threadID);
-				if (getShort.shorts.some(item => item.in == shortin)) {
-					let index = getShort.shorts.indexOf(getShort.shorts.find(item => item.in == shortin));
-					let output = getShort.shorts.find(item => item.in == shortin).out;
-					getShort.shorts[index].out = output + " | " + shortout;
-					api.sendMessage("Autorep đã tồn tại trong nhóm này", threadID, messageID);
-					return writeFile(__dirname + "/cache/data/autorep.json", JSON.stringify(oldData), "utf-8");
-				}
-				getShort.shorts.push({ in: shortin, out: shortout });
-				return writeFile(__dirname + "/cache/data/autorep.json", JSON.stringify(oldData), "utf-8", (err) => (err) ? console.error(err) : api.sendMessage("Tạo autorep thành công", threadID, messageID));
-			}
-		});
-	}
-}
+const getUniqueFileName = (type, id, extension) => {
+    const timestamp = Date.now();
+    return `${type}-${id}-${timestamp}${extension}`;
+};
+
+const countKeywordsByType = (data, threadID, senderID, type) => {
+    if (!data[threadID]) return 0;
+    return Object.values(data[threadID]).filter(k => k.senderID === senderID && k.type === type).length;
+};
+
+module.exports.handleEvent = async function ({ api, event }) {
+    const { threadID, body, messageID } = event;
+    if (!body) return;
+
+    const currentTime = Date.now();
+    if (cooldowns[threadID] && currentTime - cooldowns[threadID] < 5000) return;
+
+    let data = JSON.parse(fs.readFileSync(path));
+    if (data[threadID] && data[threadID][body]) {
+        const replyData = data[threadID][body];
+        if (replyData.type === "text") {
+            api.sendMessage(replyData.content, threadID, messageID);
+        } else if (replyData.type === "image" || replyData.type === "video") {
+            if (!fs.existsSync(replyData.path)) {
+                return api.sendMessage("⚠️ Tệp đính kèm không tồn tại hoặc đã bị xóa.", threadID, messageID);
+            }
+            api.sendMessage({
+                body: replyData.content || "",
+                attachment: fs.createReadStream(replyData.path)
+            }, threadID, messageID);
+        }
+        cooldowns[threadID] = currentTime;
+    }
+};
+
+module.exports.handleReply = async function ({ api, event, handleReply }) {
+    if (handleReply.type !== "delList") return;
+
+    const { threadID, messageID, senderID, body } = event;
+    if (senderID !== handleReply.author) return;
+
+    let data = JSON.parse(fs.readFileSync(path));
+    const indexes = body.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+    let deleted = [];
+
+    indexes.forEach(i => {
+        const key = handleReply.keys[i - 1];
+        if (key && data[threadID] && data[threadID][key]) {
+            const replyData = data[threadID][key];
+            if (replyData.type === "image" || replyData.type === "video") {
+                if (fs.existsSync(replyData.path)) {
+                    try { fs.unlinkSync(replyData.path); } catch {}
+                }
+            }
+            delete data[threadID][key];
+            deleted.push(key);
+        }
+    });
+
+    fs.writeFileSync(path, JSON.stringify(data, null, 2));
+    api.sendMessage(
+        deleted.length > 0
+            ? `✅ Đã xóa các từ khóa: ${deleted.join(", ")}`
+            : "❌ Không có từ khóa hợp lệ để xóa.",
+        threadID,
+        messageID
+    );
+};
+
+module.exports.run = async function ({ api, event, args }) {
+    const { threadID, messageID, senderID, messageReply } = event;
+    let data = JSON.parse(fs.readFileSync(path));
+    const action = args[0] ? args[0].toLowerCase() : "";
+    const input = args.join(" ").slice(action.length).trim();
+
+    switch (action) {
+        case "add":
+        case "addvideo":
+        case "addimage": {
+            const [key, reply] = input.split(" | ").map(item => item?.trim());
+            if (!key) return api.sendMessage("Vui lòng nhập từ khóa.", threadID, messageID);
+            if (action === "add" && (!reply || reply.length === 0))
+                return api.sendMessage("Vui lòng nhập cú pháp: từ khóa | nội dung", threadID, messageID);
+
+            let isFile = false, attachment = null;
+            if ((action === "addvideo" || action === "addimage") && messageReply?.attachments?.length > 0) {
+                isFile = true;
+                attachment = messageReply.attachments[0];
+                if (action === "addvideo" && attachment.type !== "video")
+                    return api.sendMessage("Tệp đính kèm không phải video.", threadID, messageID);
+                if (action === "addimage" && attachment.type !== "photo")
+                    return api.sendMessage("Tệp đính kèm không phải hình ảnh.", threadID, messageID);
+            }
+            if ((action === "addvideo" || action === "addimage") && !attachment)
+                return api.sendMessage("Vui lòng reply kèm một tệp đính kèm phù hợp.", threadID, messageID);
+
+            if (!data[threadID]) data[threadID] = {};
+            const textCount = countKeywordsByType(data, threadID, senderID, "text");
+            const imageCount = countKeywordsByType(data, threadID, senderID, "image");
+            const videoCount = countKeywordsByType(data, threadID, senderID, "video");
+
+            if (action === "add" && textCount >= 10) return api.sendMessage("Bạn đã đạt giới hạn 10 từ khóa gửi văn bản.", threadID, messageID);
+            if (action === "addimage" && imageCount >= 5) return api.sendMessage("Bạn đã đạt giới hạn 5 từ khóa gửi hình ảnh.", threadID, messageID);
+            if (action === "addvideo" && videoCount >= 3) return api.sendMessage("Bạn đã đạt giới hạn 3 từ khóa gửi video.", threadID, messageID);
+
+            const extension = isFile ? getFileExtension(attachment.url, attachment.type) : null;
+            const uniqueFileName = isFile ? getUniqueFileName(attachment.type, attachment.id, extension) : null;
+            const filePath = isFile ? `${__dirname}/data/autoreply/${uniqueFileName}` : null;
+
+            data[threadID][key] = {
+                type: isFile ? (attachment.type === "video" ? "video" : "image") : "text",
+                content: reply || "",
+                path: filePath,
+                senderID: senderID
+            };
+
+            if (isFile) {
+                try {
+                    await downloadFile(attachment.url, filePath);
+                    fs.writeFileSync(path, JSON.stringify(data, null, 2));
+                    return api.sendMessage(`Đã thêm từ khóa "${key}" kèm ${attachment.type === "video" ? "video" : "ảnh"}.`, threadID, messageID);
+                } catch (err) {
+                    console.error(err);
+                    return api.sendMessage("Đã xảy ra lỗi khi lưu file.", threadID, messageID);
+                }
+            } else {
+                fs.writeFileSync(path, JSON.stringify(data, null, 2));
+                return api.sendMessage(`Đã thêm từ khóa "${key}".`, threadID, messageID);
+            }
+        }
+
+        case "list": {
+            if (!data[threadID] || Object.keys(data[threadID]).length === 0)
+                return api.sendMessage("Hiện không có từ khóa nào được thiết lập.", threadID, messageID);
+
+            let listMessage = "📌 Danh sách từ khóa:\n";
+            const keys = Object.keys(data[threadID]);
+            keys.forEach((key, index) => {
+                const replyData = data[threadID][key];
+                const typeInfo = replyData.type === "text" ? "Văn bản" : replyData.type === "image" ? "Ảnh" : "Video";
+                listMessage += `${index + 1}. ${key} (${typeInfo}) ➝ ${replyData.content || "[Không có nội dung]"}\n`;
+            });
+            listMessage += "\n👉 Reply tin nhắn này với số thứ tự (vd: 1 hoặc 1,2,3) để xóa từ khóa.";
+
+            return api.sendMessage(listMessage, threadID, (err, info) => {
+                if (err) return;
+                global.client.handleReply.push({
+                    type: "delList",
+                    name: this.config.name,
+                    author: senderID,
+                    messageID: info.messageID,
+                    keys
+                });
+            }, messageID);
+        }
+
+        default:
+            api.sendMessage(
+                ">Hướng Dẫn<\n"
+                + "ADD: #autoreply add [Từ Khóa] | [Bot Trả Lời]\n"
+                + "ADDVIDEO: #autoreply addvideo [Từ Khóa] | [Nội Dung] (reply kèm video)\n"
+                + "ADDIMAGE: #autoreply addimage [Từ Khóa] | [Nội Dung] (reply kèm ảnh)\n\n"
+                + "LIST: #autoreply list\n",
+                threadID, messageID
+            );
+    }
+};
