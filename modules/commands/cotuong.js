@@ -407,8 +407,6 @@ module.exports.run = async function({ api, event, Users }) {
 module.exports.handleReply = async function({ api, event, handleReply, Users }) {
     const { threadID, messageID, senderID, body } = event;
     
-    if (handleReply.author !== senderID && handleReply.type === "menu") return;
-    
     const { sendMessage: send, unsendMessage: unsend } = api;
     
     try {
@@ -471,13 +469,14 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
                     },
                     threadID,
                     (error, info) => {
-                        global.client.handleReply.push({
-                            name: this.config.name,
-                            messageID: info.messageID,
-                            author: senderID,
-                            gameId: gameId,
-                            type: "playing"
-                        });
+                        if (!error) {
+                            global.client.handleReply.push({
+                                name: this.config.name,
+                                messageID: info.messageID,
+                                gameId: gameId,
+                                type: "playing"
+                            });
+                        }
                     },
                     messageID
                 );
@@ -518,13 +517,14 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
                 },
                 threadID,
                 (error, info) => {
-                    global.client.handleReply.push({
-                        name: this.config.name,
-                        messageID: info.messageID,
-                        author: senderID,
-                        gameId: gameId,
-                        type: "playing"
-                    });
+                    if (!error) {
+                        global.client.handleReply.push({
+                            name: this.config.name,
+                            messageID: info.messageID,
+                            gameId: gameId,
+                            type: "playing"
+                        });
+                    }
                 },
                 messageID
             );
@@ -564,10 +564,6 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
             const imagePath = await drawBoard(game, handleReply.gameId);
             
             if (result.gameOver) {
-                // Clean up game files
-                if (fs.existsSync(gamePath)) fs.unlinkSync(gamePath);
-                if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-                
                 const winnerName = result.winner === 'red' ? 
                     (await Users.getNameUser(game.redPlayer)) : 
                     (await Users.getNameUser(game.blackPlayer));
@@ -578,6 +574,15 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
                         attachment: fs.createReadStream(imagePath)
                     },
                     threadID,
+                    () => {
+                        // Clean up game files after message is sent
+                        try {
+                            if (fs.existsSync(gamePath)) fs.unlinkSync(gamePath);
+                            if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+                        } catch (err) {
+                            console.error('Error cleaning up game files:', err);
+                        }
+                    },
                     messageID
                 );
             }
@@ -586,8 +591,6 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
                 (await Users.getNameUser(game.redPlayer)) : 
                 (await Users.getNameUser(game.blackPlayer));
             
-            unsend(handleReply.messageID);
-            
             return send(
                 {
                     body: `✅ Nước đi hợp lệ!\n\nLượt: ${nextPlayerName} (${game.currentPlayer === 'red' ? 'Đỏ' : 'Đen'})\nReply với nước đi tiếp theo (vd: 90-80)`,
@@ -595,13 +598,15 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
                 },
                 threadID,
                 (error, info) => {
-                    global.client.handleReply.push({
-                        name: this.config.name,
-                        messageID: info.messageID,
-                        author: senderID,
-                        gameId: handleReply.gameId,
-                        type: "playing"
-                    });
+                    if (!error) {
+                        unsend(handleReply.messageID);
+                        global.client.handleReply.push({
+                            name: this.config.name,
+                            messageID: info.messageID,
+                            gameId: handleReply.gameId,
+                            type: "playing"
+                        });
+                    }
                 },
                 messageID
             );
