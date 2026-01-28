@@ -1,7 +1,7 @@
 module.exports.config = {
     name: "cotuong",
     version: "1.0.0",
-    hasPermssion: 0,
+    hasPermission: 0,
     credits: "Copilot",
     description: "Chơi cờ tướng (Xiangqi)",
     commandCategory: "Trò Chơi",
@@ -57,6 +57,30 @@ function isValidPosition(row, col) {
     return row >= 0 && row < 10 && col >= 0 && col < 9;
 }
 
+function checkFlyingGeneral(board) {
+    // Find both kings
+    let redKing = null, blackKing = null;
+    for (let row = 0; row < 10; row++) {
+        for (let col = 0; col < 9; col++) {
+            if (board[row][col] === 'K') redKing = { row, col };
+            if (board[row][col] === 'k') blackKing = { row, col };
+        }
+    }
+    
+    if (!redKing || !blackKing) return false;
+    
+    // Check if kings are on same column
+    if (redKing.col !== blackKing.col) return false;
+    
+    // Check if there are any pieces between them
+    for (let r = Math.min(redKing.row, blackKing.row) + 1; r < Math.max(redKing.row, blackKing.row); r++) {
+        if (board[r][redKing.col] !== ' ') return false;
+    }
+    
+    // Kings are facing each other - flying general violation
+    return true;
+}
+
 function inPalace(row, col, isRedPiece) {
     if (isRedPiece) {
         return row >= 7 && row <= 9 && col >= 3 && col <= 5;
@@ -83,12 +107,6 @@ function canMove(board, fromRow, fromCol, toRow, toCol) {
         case 'K': // King
             if (rowDiff + colDiff !== 1) return false;
             if (!inPalace(toRow, toCol, isRedPiece)) return false;
-            // Check flying general
-            if (target.toUpperCase() === 'K') {
-                for (let r = Math.min(fromRow, toRow) + 1; r < Math.max(fromRow, toRow); r++) {
-                    if (board[r][fromCol] !== ' ') return false;
-                }
-            }
             return true;
             
         case 'A': // Advisor
@@ -193,6 +211,14 @@ function makeMove(game, fromRow, fromCol, toRow, toCol) {
     const capturedPiece = game.board[toRow][toCol];
     game.board[toRow][toCol] = piece;
     game.board[fromRow][fromCol] = ' ';
+    
+    // Check for flying general violation
+    if (checkFlyingGeneral(game.board)) {
+        // Revert move
+        game.board[fromRow][fromCol] = piece;
+        game.board[toRow][toCol] = capturedPiece;
+        return { success: false, message: "Nước đi này vi phạm quy tắc tướng đối diện!" };
+    }
     
     // Check if king is captured
     if (capturedPiece.toUpperCase() === 'K') {
@@ -318,22 +344,32 @@ function parseMove(text) {
     // Try coordinate format: 0,0-1,0 or 00-10
     const coordMatch = text.match(/(\d),(\d)[- ](\d),(\d)/);
     if (coordMatch) {
-        return {
-            fromRow: parseInt(coordMatch[1]),
-            fromCol: parseInt(coordMatch[2]),
-            toRow: parseInt(coordMatch[3]),
-            toCol: parseInt(coordMatch[4])
-        };
+        const fromRow = parseInt(coordMatch[1]);
+        const fromCol = parseInt(coordMatch[2]);
+        const toRow = parseInt(coordMatch[3]);
+        const toCol = parseInt(coordMatch[4]);
+        
+        // Validate bounds
+        if (!isValidPosition(fromRow, fromCol) || !isValidPosition(toRow, toCol)) {
+            return null;
+        }
+        
+        return { fromRow, fromCol, toRow, toCol };
     }
     
     const coordMatch2 = text.match(/(\d)(\d)[- ](\d)(\d)/);
     if (coordMatch2) {
-        return {
-            fromRow: parseInt(coordMatch2[1]),
-            fromCol: parseInt(coordMatch2[2]),
-            toRow: parseInt(coordMatch2[3]),
-            toCol: parseInt(coordMatch2[4])
-        };
+        const fromRow = parseInt(coordMatch2[1]);
+        const fromCol = parseInt(coordMatch2[2]);
+        const toRow = parseInt(coordMatch2[3]);
+        const toCol = parseInt(coordMatch2[4]);
+        
+        // Validate bounds
+        if (!isValidPosition(fromRow, fromCol) || !isValidPosition(toRow, toCol)) {
+            return null;
+        }
+        
+        return { fromRow, fromCol, toRow, toCol };
     }
     
     return null;
@@ -377,6 +413,9 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
     
     try {
         if (handleReply.type === "menu") {
+            // Only the author of this specific menu can interact with it
+            if (handleReply.author !== senderID) return;
+            
             unsend(handleReply.messageID);
             
             if (body === "1") {
@@ -525,7 +564,10 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
             const imagePath = await drawBoard(game, handleReply.gameId);
             
             if (result.gameOver) {
-                fs.unlinkSync(gamePath);
+                // Clean up game files
+                if (fs.existsSync(gamePath)) fs.unlinkSync(gamePath);
+                if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+                
                 const winnerName = result.winner === 'red' ? 
                     (await Users.getNameUser(game.redPlayer)) : 
                     (await Users.getNameUser(game.blackPlayer));
@@ -565,7 +607,7 @@ module.exports.handleReply = async function({ api, event, handleReply, Users }) 
             );
         }
     } catch (error) {
-        console.error(error);
-        return send(`❌ Đã xảy ra lỗi: ${error.message}`, threadID, messageID);
+        console.error('Cotuong error:', error);
+        return send("❌ Đã xảy ra lỗi. Vui lòng thử lại!", threadID, messageID);
     }
 };
